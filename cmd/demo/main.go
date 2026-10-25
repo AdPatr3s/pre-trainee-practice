@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
 
+	"github.com/AdPatr3s/pre-trainee-practice/internal/accesslog"
 	"github.com/AdPatr3s/pre-trainee-practice/internal/pipeline"
 	"github.com/AdPatr3s/pre-trainee-practice/internal/wordcount"
 )
@@ -26,4 +28,11 @@ func main() {
 	fmt.Println(tokens)
 	fmt.Println(wordcount.TopN(freq, 5))
 
+	data, err := os.ReadFile("../../internal/accesslog/testdata/access.log")
+	if err != nil {
+		fmt.Println("Не удалось прочитать файл")
+		return
+	}
+	text := string(data)
+	fmt.Println(accesslog.Summarize(text, 3))
 }	
