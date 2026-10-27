@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AdPatr3s/pre-trainee-practice/internal/booking"
+	"github.com/AdPatr3s/pre-trainee-practice/internal/fileproc"
 )
 
 func main() {
@@ -28,4 +29,6 @@ func main() {
 	list, _ := s.ListRoom("orion")
 	fmt.Printf("reservations: %+v\n", list)
 	_ = b
+
+	fmt.Println(fileproc.Process([]string{"../../internal/fileproc/testdata/ok.txt", "../../internal/fileproc/testdata/missing.txt", "../../internal/fileproc/testdata/panic.txt", "../../internal/fileproc/testdata/empty.txt"}))
 }	
