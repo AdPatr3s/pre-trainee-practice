@@ -7,6 +7,17 @@ import (
 	"strings"
 )
 
+type RoomStore interface {
+	SaveRoom(r Room) error
+	GetRoom(id string) (Room, error)
+}
+
+type ReservationStore interface {
+	Save(Reservation) error
+	Get(id string) (Reservation, error)
+	ListByRoom(roomID string) ([]Reservation, error)
+}
+
 var (
 	ErrNotFound  = errors.New("booking: not found")
 	ErrConflict  = errors.New("booking: slot conflict")
@@ -28,18 +39,26 @@ type Reservation struct {
 }
 
 type Service struct {
-	rooms map[string]Room
-	reservations map[string]Reservation
-	booking map[string][]string
+	rooms RoomStore
+	reservations ReservationStore
 	nextId int
 }
 
-func NewService() *Service {
+func NewService(rooms RoomStore, reservations ReservationStore) *Service {
 	return &Service{
-		rooms: make(map[string]Room),
-		reservations: make(map[string]Reservation),
-		booking: make(map[string][]string),
+		rooms:        rooms,
+		reservations: reservations,
 	}
+}
+
+func NewMemoryService() *Service {
+	return NewService(
+		&MemoryRoomStore{rooms: make(map[string]Room)},
+		&MemoryReservationStore{
+			reservation: make(map[string]Reservation),
+			booking:     make(map[string][]string),
+		},
+	)
 }
 
 func (s *Service) AddRoom(id, name string) error {
@@ -51,58 +70,68 @@ func (s *Service) AddRoom(id, name string) error {
 		return ErrInvalid
 	}
 
-	if  _, exist := s.rooms[r.ID]; exist {
+	if  _, err := s.rooms.GetRoom(r.ID); err == nil {
 		return fmt.Errorf("add room %s: %w", id, ErrInvalid)
 	}
 
-	s.rooms[r.ID] = r
-	return nil
+	return s.rooms.SaveRoom(r)
 }
 
 func (s *Service) Book(roomID string, start, end int) (Reservation, error) {
-	if _, exist := s.rooms[roomID]; !exist {
-		return Reservation{}, ErrNotFound
-	}
 	if start < 0 || start >= end || end > 24 {
 		return Reservation{}, ErrInvalid
 	}
 
-	for _, id := range s.booking[roomID] {
-		res := s.reservations[id]
+	_, err := s.rooms.GetRoom(roomID)
+	if err != nil {
+		return Reservation{}, fmt.Errorf("book %s: %w", roomID, err)
+	}
+
+	reservations, err := s.reservations.ListByRoom(roomID)
+	if err != nil {
+		return Reservation{}, fmt.Errorf("book %s list: %w", roomID, err)
+	}
+
+	for _, res := range reservations {
 		if !res.Cancelled && (start < res.End && res.Start < end) {
 			return Reservation{}, fmt.Errorf("book %s: %w", roomID, ErrConflict)
 		}
 	}
+
 	s.nextId++
-	id := strconv.Itoa(s.nextId) 
-	res := Reservation{
-		ID: id,
+	id := strconv.Itoa(s.nextId)
+	newRes := Reservation{
+		ID:     id,
 		RoomID: roomID,
 		Start:  start,
 		End:    end,
 	}
-	s.reservations[id] = res
-	s.booking[roomID] = append(s.booking[roomID], id) 
 
-	return res, nil
+	if err := s.reservations.Save(newRes); err != nil {
+		return Reservation{}, fmt.Errorf("book %s save: %w", roomID, err)
+	}
+
+	return newRes, nil
 }
 
 func (s *Service) Cancel(reservationID string) error {
-	res, ok := s.reservations[reservationID]
-	if  !ok {
+	res, err := s.reservations.Get(reservationID)
+	if  err != nil {
 		return fmt.Errorf("cancel %s: %w",reservationID, ErrNotFound) 
 	}
 	if res.Cancelled {
 		return fmt.Errorf("cancel %s: %w", reservationID, ErrCancelled)
 	}
 	res.Cancelled = true
-	s.reservations[reservationID] = res
+	if err := s.reservations.Save(res); err != nil {
+	return fmt.Errorf("cancel %s save: %w", reservationID, err)
+}
 	return nil
 }
 
 func (s *Service) Get(reservationID string) (Reservation, error) {
-	res, ok := s.reservations[reservationID]
-	if  !ok {
+	res, err := s.reservations.Get(reservationID)
+	if  err != nil {
 		return Reservation{}, fmt.Errorf("get %s: %w", reservationID, ErrNotFound) 
 	}
 	
@@ -110,16 +139,15 @@ func (s *Service) Get(reservationID string) (Reservation, error) {
 }
 
 func (s *Service) ListRoom(roomID string) ([]Reservation, error) {
-	_, ok := s.rooms[roomID]
-	if !ok {
-		return []Reservation{}, fmt.Errorf("list %s: %w", roomID, ErrNotFound) 
+	_, err := s.rooms.GetRoom(roomID)
+	if err != nil {
+		return []Reservation{}, fmt.Errorf("list %s: %w", roomID, err) 
 	}
 
-	res := s.booking[roomID]
-	result := make([]Reservation, 0, len(res))
-
-	for _, v := range res {
-		result = append(result, s.reservations[v])
+	res, err := s.reservations.ListByRoom(roomID)
+	if err != nil {
+		return []Reservation{}, fmt.Errorf("list %s: %w", roomID, err) 
 	}
-	return result, nil
+	
+	return res, nil
 }// includes cancelled

@@ -15,7 +15,8 @@ type Pair struct {
 func Tokens(s string) []string {
 	var result []string
 	var b strings.Builder
-
+	b.Grow(len(s))
+	
 	wr := func() {
 		if b.Len() > 0 {
 			result = append(result, strings.ToLower(b.String()))
