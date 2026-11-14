@@ -106,7 +106,7 @@ func TestBookOverlap(t *testing.T) {
 	_ = s.AddRoom("orion", "Orion")
 	_, _ = s.Book("orion", 9, 11)
 	
-	_, err := s.Book("orion", 9, 12)
+	_, err := s.Book("orion", 10, 12)
 	if !errors.Is(err, ErrConflict) {
 		t.Fatalf("expected ErrConflict, got %v", err)
 	}
